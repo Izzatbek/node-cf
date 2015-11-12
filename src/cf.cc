@@ -5,11 +5,13 @@
 #include <sys/time.h>
 #include <stdlib.h> // abort
 #include <assert.h> // assert
+#include <iostream>
 
 namespace cf {
 
-using namespace node;
 using namespace v8;
+
+Nan::Persistent<Function> Loop::constructor;
 
 Loop::Loop(CFRunLoopRef loop, CFStringRef mode) : cf_lp_(loop),
                                                   cf_mode_(mode),
@@ -85,53 +87,50 @@ void Loop::Perform(void* arg) {
 }
 
 
-Handle<Value> Loop::New(const Arguments& args) {
-  HandleScope scope;
-
-  Loop* loop = new Loop(CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
-  loop->Wrap(args.Holder());
-
-  return scope.Close(args.Holder());
+NAN_METHOD(Loop::New) {
+  if (info.IsConstructCall()) {
+    Loop* loop = new Loop(CFRunLoopGetMain(), kCFRunLoopDefaultMode);
+    loop->Wrap(info.This());
+    info.GetReturnValue().Set(info.This());
+  } 
+  else 
+  {
+    Local<v8::Function> cons = Nan::New(constructor);
+    info.GetReturnValue().Set(cons->NewInstance(0, NULL));
+  }
 }
 
 
-Handle<Value> Loop::AddRef(const Arguments& args) {
-  HandleScope scope;
+NAN_METHOD(Loop::AddRef) {
+  Loop* self = ObjectWrap::Unwrap<Loop>(info.Holder());
 
-  Loop* loop = ObjectWrap::Unwrap<Loop>(args.This());
-  loop->Ref();
+  self->Ref();
 
-  return scope.Close(Null());
+  info.GetReturnValue().SetUndefined();
 }
 
 
-Handle<Value> Loop::RemRef(const Arguments& args) {
-  HandleScope scope;
-
-  Loop* loop = ObjectWrap::Unwrap<Loop>(args.This());
-  loop->Unref();
-  if (loop->refs_ == 0) {
-    loop->Close();
+NAN_METHOD(Loop::RemRef) {
+  Loop* self = ObjectWrap::Unwrap<Loop>(info.Holder());
+  self->Unref();
+  if (self->refs_ == 0) {
+    self->Close();
   }
 
-  return scope.Close(Null());
+  info.GetReturnValue().SetUndefined();
 }
 
+NAN_MODULE_INIT(Loop::Init)
+{
+  Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+  tpl->SetClassName(Nan::New("Loop").ToLocalChecked());
+  tpl->InstanceTemplate()->SetInternalFieldCount(2);
 
-void Loop::Init(Handle<Object> target) {
-  HandleScope scope;
+  Nan::SetPrototypeMethod(tpl, "ref", AddRef);
+  Nan::SetPrototypeMethod(tpl, "unref", RemRef);
 
-  Local<FunctionTemplate> t = FunctionTemplate::New(Loop::New);
-
-  t->InstanceTemplate()->SetInternalFieldCount(1);
-  t->SetClassName(String::NewSymbol("Loop"));
-
-  NODE_SET_PROTOTYPE_METHOD(t, "ref", AddRef);
-  NODE_SET_PROTOTYPE_METHOD(t, "unref", RemRef);
-
-  target->Set(String::NewSymbol("Loop"), t->GetFunction());
+  constructor.Reset(Nan::GetFunction(tpl).ToLocalChecked());
+  Nan::Set(target, Nan::New("Loop").ToLocalChecked(), Nan::GetFunction(tpl).ToLocalChecked());
 }
 
 } // namespace cf
-
-NODE_MODULE(cf, cf::Loop::Init)

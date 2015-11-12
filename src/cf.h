@@ -1,33 +1,30 @@
 #ifndef _SRC_CF_H_
 #define _SRC_CF_H_
 
-#include <node.h>
-#include <node_buffer.h>
-#include <node_object_wrap.h>
-#include <v8.h>
+#include <uv.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <nan.h>
 
 namespace cf {
 
-using namespace node;
-using namespace v8;
-using v8::Handle;
+class Loop : public Nan::ObjectWrap {
 
-class Loop : ObjectWrap {
- public:
+public:
+  static NAN_MODULE_INIT(Init);
+
+ protected:
+
+  static Nan::Persistent<v8::Function> constructor;
+
   Loop(CFRunLoopRef loop, CFStringRef mode);
   ~Loop();
   void Close();
 
-  static void Init(Handle<Object> target);
-
   inline uv_loop_t* uv() const { return uv_; }
 
- protected:
-
-  static Handle<Value> New(const Arguments& args);
-  static Handle<Value> AddRef(const Arguments& args);
-  static Handle<Value> RemRef(const Arguments& args);
+  static NAN_METHOD(New);
+  static NAN_METHOD(AddRef);
+  static NAN_METHOD(RemRef);
 
   static void Worker(void* arg);
   static void Perform(void* arg);
